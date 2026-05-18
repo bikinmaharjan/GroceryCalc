@@ -15,19 +15,25 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '../api/axios'
+import { useAuthStore } from '../stores/auth'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 
 const newPassword = ref('')
 const error = ref('')
 const router = useRouter()
+const auth = useAuthStore()
 
 const handleReset = async () => {
     try {
         await apiClient.post('/change-password', 
             { new_password: newPassword.value }
         )
-        router.push('/dashboard')
+        if (auth.user?.is_admin) {
+            router.push('/admin')
+        } else {
+            router.push('/dashboard')
+        }
     } catch (e: any) {
         error.value = e.response?.data?.detail || 'Failed to update password'
     }

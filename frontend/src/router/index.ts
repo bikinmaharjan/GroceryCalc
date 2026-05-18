@@ -47,11 +47,14 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
   
+  if (to.meta.requiresAuth && !auth.token) {
+    return '/login'
+  }
   if (to.meta.requiresAdmin && !auth.user?.is_admin) {
     return '/login'
   } else if (to.path.startsWith('/admin') && !auth.user?.is_admin) {
     return '/dashboard'
-  } else if (to.path === '/dashboard' && auth.user?.is_admin) {
+  } else if (to.path.startsWith('/dashboard') && auth.user?.is_admin) {
     return '/admin'
   }
 })
