@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+*.log
+
+# Database
+grocery.db
+*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+.npm
+.eslintcache
+.stylelintcache
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# App specific
+uploads/
