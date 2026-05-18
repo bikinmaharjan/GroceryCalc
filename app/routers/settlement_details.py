@@ -105,7 +105,9 @@ async def get_settlement_details(list_id: int, db: AsyncSession = Depends(get_db
                 
             transactions.append({
                 "from": from_user,
+                "from_name": debtors[d]["display_name"],
                 "to": to_user,
+                "to_name": creditors[c]["display_name"],
                 "amount": amount,
                 "status": status
             })

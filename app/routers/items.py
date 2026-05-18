@@ -20,7 +20,7 @@ async def get_items(list_id: int, db: AsyncSession = Depends(get_db), current_us
     return result.scalars().all()
 
 @router.post("/items")
-async def create_item(list_id: int, description: str, cost: float, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+async def create_item(list_id: int, description: str, cost: float, category: str = "grocery", db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
     # Verify user belongs to the group of the list
     result = await db.execute(select(List).where(List.id == list_id))
     list_obj = result.scalar_one_or_none()
@@ -31,7 +31,7 @@ async def create_item(list_id: int, description: str, cost: float, db: AsyncSess
     if list_obj.is_settling:
         raise HTTPException(status_code=403, detail="List is currently settling; items cannot be added")
         
-    item = Item(list_id=list_id, user_id=current_user.id, description=description, cost=cost)
+    item = Item(list_id=list_id, user_id=current_user.id, description=description, cost=cost, category=category)
     db.add(item)
     await db.commit()
     return item

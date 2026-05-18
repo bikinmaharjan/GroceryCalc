@@ -1,11 +1,48 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 import ToastNotification from '../components/ToastNotification.vue'
+import { 
+  Edit2, 
+  Trash2, 
+  ShoppingBag, 
+  Users, 
+  DollarSign, 
+  TrendingUp, 
+  ArrowRight,
+  PieChart,
+  BarChart3,
+  Calendar
+} from '@lucide/vue'
+import { 
+  Chart as ChartJS, 
+  Title, 
+  Tooltip, 
+  Legend, 
+  BarElement, 
+  CategoryScale, 
+  LinearScale, 
+  PointElement, 
+  LineElement, 
+  ArcElement 
+} from 'chart.js'
+import { Bar, Line, Pie } from 'vue-chartjs'
+
+ChartJS.register(
+  Title, 
+  Tooltip, 
+  Legend, 
+  BarElement, 
+  CategoryScale, 
+  LinearScale, 
+  PointElement, 
+  LineElement, 
+  ArcElement
+)
 
 interface Item { id: number; description: string; cost: number; created_at: string }
 interface List { id: number; name: string; is_settling?: boolean; status?: string }
@@ -19,6 +56,43 @@ const selectedGroup = ref<Group | null>(null)
 const stats = ref({ total_cost: 0, item_count: 0, share_per_user: 0 })
 const analytics = ref<any>(null)
 const settlementDetails = ref<any>({ settlements: [], transactions: [], member_count: 0 })
+
+const userChartData = computed(() => {
+    if (!analytics.value?.user_totals) return null
+    return {
+        labels: analytics.value.user_totals.map((u: any) => u.user),
+        datasets: [{
+            label: 'Total Spent ($)',
+            backgroundColor: '#10b981',
+            data: analytics.value.user_totals.map((u: any) => u.total)
+        }]
+    }
+})
+
+const categoryChartData = computed(() => {
+    if (!analytics.value?.category_totals) return null
+    return {
+        labels: analytics.value.category_totals.map((c: any) => c.category),
+        datasets: [{
+            backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#64748b'],
+            data: analytics.value.category_totals.map((c: any) => c.total)
+        }]
+    }
+})
+
+const trendChartData = computed(() => {
+    if (!analytics.value?.monthly_trend) return null
+    return {
+        labels: analytics.value.monthly_trend.map((t: any) => t.month),
+        datasets: [{
+            label: 'Spending ($)',
+            borderColor: '#10b981',
+            backgroundColor: '#10b981',
+            data: analytics.value.monthly_trend.map((t: any) => t.total),
+            tension: 0.3
+        }]
+    }
+})
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -36,7 +110,8 @@ watch(() => route.path, (newPath) => {
 }, { immediate: true })
 
 const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' })
-const newItem = ref({ description: '', cost: 0 })
+const categories = ref(['grocery', 'electricity bills', 'internet bill', 'gas bill'])
+const newItem = ref({ description: '', cost: 0, category: 'grocery' })
 const editingItem = ref<Item | null>(null)
 
 const handleLogout = () => {
@@ -126,11 +201,32 @@ const loadStats = async () => {
 
 const addItem = async () => {
   if (!activeList.value) return
-  await axios.post(`http://localhost:8080/api/items?list_id=${activeList.value.id}&description=${newItem.value.description}&cost=${newItem.value.cost}`, null, {
+  
+  const cat = newItem.value.category.trim()
+  if (cat && !categories.value.includes(cat)) {
+    categories.value.push(cat)
+  }
+
+  await axios.post(`http://localhost:8080/api/items?list_id=${activeList.value.id}&description=${newItem.value.description}&cost=${newItem.value.cost}&category=${cat}`, null, {
     headers: { Authorization: `Bearer ${auth.token}` }
   })
-  newItem.value = { description: '', cost: 0 }
+  newItem.value = { description: '', cost: 0, category: 'grocery' }
   await Promise.all([loadItems(), loadStats(), loadSettlementDetails()])
+}
+
+const handleCategoryChange = () => {
+    if (newItem.value.category === 'ADD_NEW') {
+        const newCat = prompt('Enter new category:')
+        if (newCat && newCat.trim()) {
+            const cat = newCat.trim()
+            if (!categories.value.includes(cat)) {
+                categories.value.push(cat)
+            }
+            newItem.value.category = cat
+        } else {
+            newItem.value.category = 'grocery'
+        }
+    }
 }
 
 const startEdit = (item: Item) => { editingItem.value = { ...item } }
@@ -261,17 +357,23 @@ onMounted(loadData)
          <div v-if="activeTab === 'items'">
               <!-- Current List Summary -->
               <div class="mb-8">
-                <div class="flex justify-between items-center mb-4">
-                  <h2 class="font-bold text-xl text-slate-800">
-                    <span v-if="!isRenaming">Current List: {{ activeList.name }}</span>
-                    <input v-else v-model="editingListName" class="p-1 border rounded text-lg font-bold" />
-                  </h2>
-                  <div class="flex gap-2">
-                    <BaseButton v-if="!isRenaming" variant="secondary" class="text-xs" @click="isRenaming = true; editingListName = activeList.name">Rename</BaseButton>
-                    <BaseButton v-if="isRenaming" variant="primary" class="text-xs" @click="renameList">Save</BaseButton>
-                    <BaseButton v-if="isRenaming" variant="secondary" class="text-xs" @click="isRenaming = false">Cancel</BaseButton>
-                  </div>
-                </div>
+<div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                   <div class="flex items-center gap-3">
+                     <div class="p-2 bg-emerald-100 rounded-lg text-emerald-700">
+                       <ShoppingBag class="w-6 h-6" />
+                     </div>
+                     <h2 class="font-extrabold text-3xl text-slate-900 tracking-tight">
+                       <span v-if="!isRenaming">{{ activeList.name }}</span>
+                       <input v-else v-model="editingListName" class="p-1 border rounded text-2xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                     </h2>
+                   </div>
+                   <div class="flex gap-2">
+                     <BaseButton v-if="!isRenaming" variant="secondary" class="text-xs" @click="isRenaming = true; editingListName = activeList.name">Rename</BaseButton>
+                     <BaseButton v-if="isRenaming" variant="primary" class="text-xs" @click="renameList">Save</BaseButton>
+                     <BaseButton v-if="isRenaming" variant="secondary" class="text-xs" @click="isRenaming = false">Cancel</BaseButton>
+                   </div>
+                 </div>
+
                 <BaseCard class="grid grid-cols-1 md:grid-cols-4 gap-6">
                    <div>
                        <h3 class="text-slate-500 text-sm">List Total</h3>
@@ -292,55 +394,76 @@ onMounted(loadData)
                </BaseCard>
              </div>
 
-             <div v-if="!activeList?.is_settling" class="mb-8 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
-                <h3 class="font-bold text-lg text-slate-800 mb-4">Add Item</h3>
-                <div class="flex gap-4">
-                    <input v-model="newItem.description" placeholder="Description" class="p-2 border rounded flex-1" />
-                    <input v-model.number="newItem.cost" type="number" step="0.01" placeholder="Cost" class="p-2 border rounded w-32" />
-                    <BaseButton @click="addItem">Add</BaseButton>
-                </div>
-            </div>
+<div v-if="!activeList?.is_settling" class="mb-8 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
+                 <h3 class="font-bold text-lg text-slate-800 mb-4">Add Item</h3>
+                 <div class="flex flex-wrap gap-4">
+                     <input v-model="newItem.description" placeholder="Description" class="p-2 border rounded flex-1 min-w-[200px]" />
+                     <input v-model.number="newItem.cost" type="number" step="0.01" placeholder="Cost" class="p-2 border rounded w-32" />
+                     <div class="flex gap-2">
+                       <select v-model="newItem.category" @change="handleCategoryChange" class="p-2 border rounded w-40">
+                         <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+                         <option value="ADD_NEW">+ Add New...</option>
+                       </select>
+                     </div>
+                     <BaseButton @click="addItem">Add</BaseButton>
+                 </div>
+             </div>
+
             <div v-else class="mb-8 p-6 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-center">
                 <p class="font-medium">Settlement in progress. Adding new items is disabled.</p>
             </div>
             <BaseCard>
               <h2 class="font-bold text-lg text-slate-800 mb-4">Items</h2>
               <div class="overflow-x-auto">
-                <table class="w-full text-left">
-                  <thead>
-                    <tr class="text-slate-500 border-b border-slate-200">
-                      <th class="p-4">Description</th>
-                      <th class="p-4">Cost</th>
-                      <th class="p-4">Date</th>
-                      <th class="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-100">
-                    <template v-for="item in items" :key="item.id">
-                        <tr v-if="editingItem?.id !== item.id" class="hover:bg-slate-50">
-                          <td class="p-4">{{ item.description }}</td>
-                          <td class="p-4">${{ item.cost.toFixed(2) }}</td>
-                          <td class="p-4">{{ new Date(item.created_at).toLocaleDateString() }}</td>
-                          <td class="p-4 text-right">
-                            <BaseButton v-if="!activeList?.is_settling" variant="secondary" class="text-xs mr-2" @click="startEdit(item)">Edit</BaseButton>
-                            <BaseButton v-if="!activeList?.is_settling" variant="secondary" class="text-xs text-red-600" @click="deleteItem(item.id)">Delete</BaseButton>
-                          </td>
+<table class="w-full text-left">
+                      <thead>
+                        <tr class="text-slate-500 border-b border-slate-200">
+                          <th class="p-4">Description</th>
+                          <th class="p-4">Category</th>
+                          <th class="p-4">Cost</th>
+                          <th class="p-4">Date</th>
+                          <th class="p-4 text-right">Actions</th>
                         </tr>
-                        <tr v-else class="bg-slate-50">
-                            <td class="p-4"><input v-model="editingItem.description" class="p-1 border rounded w-full" /></td>
-                            <td class="p-4"><input v-model.number="editingItem.cost" type="number" class="p-1 border rounded w-20" /></td>
-                            <td class="p-4">...</td>
-                            <td class="p-4 text-right">
-                                <BaseButton variant="primary" class="text-xs mr-2" @click="saveItem">Save</BaseButton>
-                                <BaseButton variant="secondary" class="text-xs" @click="editingItem = null">Cancel</BaseButton>
-                            </td>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        <template v-for="item in items" :key="item.id">
+                            <tr v-if="editingItem?.id !== item.id" class="hover:bg-slate-50">
+                              <td class="p-4">{{ item.description }}</td>
+                              <td class="p-4"><span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{{ item.category || 'grocery' }}</span></td>
+                              <td class="p-4">${{ item.cost.toFixed(2) }}</td>
+                              <td class="p-4">{{ new Date(item.created_at).toLocaleDateString() }}</td>
+                              <td class="p-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                  <button v-if="!activeList?.is_settling" 
+                                    class="p-2 h-8 w-8 flex items-center justify-center rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all shadow-sm" 
+                                    @click="startEdit(item)">
+                                    <Edit2 class="w-4 h-4" />
+                                  </button>
+                                  <button v-if="!activeList?.is_settling" 
+                                    class="p-2 h-8 w-8 flex items-center justify-center rounded-lg bg-red-500 text-white hover:bg-red-600 transition-all shadow-sm" 
+                                    @click="deleteItem(item.id)">
+                                    <Trash2 class="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr v-else class="bg-slate-50">
+                                <td class="p-4"><input v-model="editingItem.description" class="p-1 border rounded w-full" /></td>
+                                <td class="p-4"><input v-model="editingItem.category" class="p-1 border rounded w-full" /></td>
+                                <td class="p-4"><input v-model.number="editingItem.cost" type="number" class="p-1 border rounded w-20" /></td>
+                                <td class="p-4">...</td>
+                                <td class="p-4 text-right">
+                                    <BaseButton variant="primary" class="text-xs mr-2" @click="saveItem">Save</BaseButton>
+                                    <BaseButton variant="secondary" class="text-xs" @click="editingItem = null">Cancel</BaseButton>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr v-if="items.length === 0">
+                            <td colspan="5" class="p-4 text-center text-slate-400 italic">No items added yet.</td>
                         </tr>
-                    </template>
-                    <tr v-if="items.length === 0">
-                        <td colspan="4" class="p-4 text-center text-slate-400 italic">No items added yet.</td>
-                    </tr>
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+
               </div>
             </BaseCard>
         </div>
@@ -377,7 +500,12 @@ onMounted(loadData)
                 <h3 class="font-bold text-lg mb-4">Who owes who?</h3>
                 <ul class="space-y-2">
                     <li v-for="t in settlementDetails.transactions" :key="t.from" class="bg-slate-100 p-3 rounded flex justify-between items-center">
-                        <span><span class="font-bold">{{ t.from }}</span> owes <span class="font-bold">{{ t.to }}</span> ${{ t.amount.toFixed(2) }}</span>
+                        <span class="flex items-center gap-2">
+                          <span class="font-bold">{{ t.from_name }}</span> 
+                          <ArrowRight class="w-4 h-4 text-slate-400" /> 
+                          <span class="font-bold">{{ t.to_name }}</span> 
+                          <span class="ml-2 text-slate-600">${{ t.amount.toFixed(2) }}</span>
+                        </span>
                         <div class="flex items-center gap-2">
                             <template v-if="t.status === 'paid'">
                                 <span class="text-emerald-600 text-xs font-medium uppercase">Paid</span>
@@ -459,61 +587,129 @@ onMounted(loadData)
              </div>
          </div>
 
-         <!-- Analytics Tab -->
-         <div v-if="activeTab === 'analytics'" class="space-y-6">
-              <!-- Current List Summary -->
-              <div class="mb-8">
-                <div class="flex justify-between items-center mb-4">
-                  <h2 class="font-bold text-xl text-slate-800">
-                    <span v-if="!isRenaming">Current List: {{ activeList.name }}</span>
-                    <input v-else v-model="editingListName" class="p-1 border rounded text-lg font-bold" />
-                  </h2>
-                  <div class="flex gap-2">
-                    <BaseButton v-if="!isRenaming" variant="secondary" class="text-xs" @click="isRenaming = true; editingListName = activeList.name">Rename</BaseButton>
-                    <BaseButton v-if="isRenaming" variant="primary" class="text-xs" @click="renameList">Save</BaseButton>
-                    <BaseButton v-if="isRenaming" variant="secondary" class="text-xs" @click="isRenaming = false">Cancel</BaseButton>
-                  </div>
+          <!-- Analytics Tab -->
+          <div v-if="activeTab === 'analytics'" class="space-y-6">
+               <!-- Current List Summary -->
+               <div class="mb-8">
+                 <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                   <div class="flex items-center gap-3">
+                     <div class="p-2 bg-emerald-100 rounded-lg text-emerald-700">
+                       <ShoppingBag class="w-6 h-6" />
+                     </div>
+                     <h2 class="font-extrabold text-3xl text-slate-900 tracking-tight">
+                       <span v-if="!isRenaming">{{ activeList.name }}</span>
+                       <input v-else v-model="editingListName" class="p-1 border rounded text-2xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                     </h2>
+                   </div>
+                   <div class="flex gap-2">
+                     <BaseButton v-if="!isRenaming" variant="secondary" class="text-xs" @click="isRenaming = true; editingListName = activeList.name">Rename</BaseButton>
+                     <BaseButton v-if="isRenaming" variant="primary" class="text-xs" @click="renameList">Save</BaseButton>
+                     <BaseButton v-if="isRenaming" variant="secondary" class="text-xs" @click="isRenaming = false">Cancel</BaseButton>
+                   </div>
+                 </div>
+                 <BaseCard class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div>
+                        <div class="flex items-center gap-2 text-slate-500 text-sm mb-1">
+                          <DollarSign class="w-4 h-4" />
+                          <h3>List Total</h3>
+                        </div>
+                        <p class="text-2xl font-bold">${{ stats.total_cost.toFixed(2) }}</p>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 text-slate-500 text-sm mb-1">
+                          <ShoppingBag class="w-4 h-4" />
+                          <h3>Items</h3>
+                        </div>
+                        <p class="text-2xl font-bold">{{ stats.item_count }}</p>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 text-slate-500 text-sm mb-1">
+                          <Users class="w-4 h-4" />
+                          <h3>Members</h3>
+                        </div>
+                        <p class="text-2xl font-bold">{{ settlementDetails.member_count }}</p>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 text-slate-500 text-sm mb-1">
+                          <TrendingUp class="w-4 h-4" />
+                          <h3>Share per User</h3>
+                        </div>
+                        <p class="text-2xl font-bold text-emerald-600">${{ stats.share_per_user.toFixed(2) }}</p>
+                    </div>
+                </BaseCard>
+              </div>
+ 
+              <h2 class="font-bold text-2xl text-slate-800 mb-4 flex items-center gap-2">
+                  <BarChart3 class="w-7 h-7 text-emerald-600" />
+                  Group Analytics
+                </h2>
+              <div v-if="analytics" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <BaseCard class="bg-white border-l-4 border-l-blue-500">
+                    <p class="text-slate-500 text-xs uppercase font-bold">Group Total Spent</p>
+                    <p class="text-2xl font-bold">${{ analytics.total_spent.toFixed(2) }}</p>
+                  </BaseCard>
+                  <BaseCard class="bg-white border-l-4 border-l-indigo-500">
+                    <p class="text-slate-500 text-xs uppercase font-bold">Total Items</p>
+                    <p class="text-2xl font-bold">{{ analytics.total_items }}</p>
+                  </BaseCard>
+                  <BaseCard class="bg-white border-l-4 border-l-purple-500">
+                    <p class="text-slate-500 text-xs uppercase font-bold">Top Spender</p>
+                    <p class="text-2xl font-bold">{{ analytics.user_totals[0]?.user || 'N/A' }}</p>
+                    <p class="text-xs text-slate-500">${{ analytics.user_totals[0]?.total.toFixed(2) || '0.00' }}</p>
+                  </BaseCard>
                 </div>
-                <BaseCard class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   <div>
-                       <h3 class="text-slate-500 text-sm">List Total</h3>
-                       <p class="text-2xl font-bold">${{ stats.total_cost.toFixed(2) }}</p>
-                   </div>
-                   <div>
-                       <h3 class="text-slate-500 text-sm">Items</h3>
-                       <p class="text-2xl font-bold">{{ stats.item_count }}</p>
-                   </div>
-                   <div>
-                       <h3 class="text-slate-500 text-sm">Members</h3>
-                       <p class="text-2xl font-bold">{{ settlementDetails.member_count }}</p>
-                   </div>
-                   <div>
-                       <h3 class="text-slate-500 text-sm">Share per User</h3>
-                       <p class="text-2xl font-bold text-emerald-600">${{ stats.share_per_user.toFixed(2) }}</p>
-                   </div>
-               </BaseCard>
-             </div>
 
-             <h2 class="font-bold text-2xl text-slate-800 mb-4">Group Analytics</h2>
-             <div v-if="analytics" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <BaseCard class="bg-white border-l-4 border-l-blue-500">
-                 <p class="text-slate-500 text-xs uppercase font-bold">Group Total Spent</p>
-                 <p class="text-2xl font-bold">${{ analytics.total_spent.toFixed(2) }}</p>
-               </BaseCard>
-               <BaseCard class="bg-white border-l-4 border-l-indigo-500">
-                 <p class="text-slate-500 text-xs uppercase font-bold">Total Items</p>
-                 <p class="text-2xl font-bold">{{ analytics.total_items }}</p>
-               </BaseCard>
-               <BaseCard class="bg-white border-l-4 border-l-purple-500">
-                 <p class="text-slate-500 text-xs uppercase font-bold">Top Spender</p>
-                 <p class="text-2xl font-bold">{{ analytics.user_totals[0]?.user || 'N/A' }}</p>
-                 <p class="text-xs text-slate-500">${{ analytics.user_totals[0]?.total.toFixed(2) || '0.00' }}</p>
-               </BaseCard>
-             </div>
-             <div v-else class="text-center p-10 bg-white rounded-xl border border-slate-200 text-slate-500">
-                 No analytics data available for this group.
-             </div>
-         </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <BaseCard>
+                    <h3 class="font-bold text-lg mb-4">Spending per User</h3>
+                    <div class="h-64">
+                      <Bar v-if="userChartData" :data="userChartData" :options="{ maintainAspectRatio: false }" />
+                    </div>
+                  </BaseCard>
+                  <BaseCard>
+                    <h3 class="font-bold text-lg mb-4">Spending by Category</h3>
+                    <div class="h-64">
+                      <Pie v-if="categoryChartData" :data="categoryChartData" :options="{ maintainAspectRatio: false }" />
+                    </div>
+                  </BaseCard>
+                </div>
+
+                <BaseCard>
+                  <h3 class="font-bold text-lg mb-4">Monthly Spending Trend</h3>
+                  <div class="h-64">
+                    <Line v-if="trendChartData" :data="trendChartData" :options="{ maintainAspectRatio: false }" />
+                  </div>
+                </BaseCard>
+
+                <BaseCard>
+                  <h3 class="font-bold text-lg mb-4">Top 10 Most Expensive Items</h3>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                      <thead>
+                        <tr class="text-slate-500 border-b border-slate-200">
+                          <th class="p-4">Item</th>
+                          <th class="p-4 text-right">Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        <tr v-for="item in analytics.top_items" :key="item.description" class="hover:bg-slate-50">
+                          <td class="p-4">{{ item.description }}</td>
+                          <td class="p-4 text-right font-medium">${{ item.cost.toFixed(2) }}</td>
+                        </tr>
+                        <tr v-if="!analytics.top_items?.length">
+                          <td colspan="2" class="p-4 text-center text-slate-400 italic">No items found.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </BaseCard>
+              </div>
+              <div v-else class="text-center p-10 bg-white rounded-xl border border-slate-200 text-slate-500">
+                  No analytics data available for this group.
+              </div>
+          </div>
+
       </div>
     </main>
   </div>
