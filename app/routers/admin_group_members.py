@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.database import get_db
 from app.models import GroupMember
-from app.dependencies import get_current_user
 
 router = APIRouter()
 

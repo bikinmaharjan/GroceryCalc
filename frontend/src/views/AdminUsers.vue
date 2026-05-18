@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
-import AdminLayout from '../components/AdminLayout.vue'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 
@@ -40,7 +39,6 @@ const resetPassword = async (userId: number) => {
 </script>
 
 <template>
-  <AdminLayout>
     <div class="mb-8 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
       <h2 class="text-xl font-bold text-slate-800 mb-4">Create User</h2>
       <div class="flex gap-4">
@@ -80,6 +78,5 @@ const resetPassword = async (userId: number) => {
         </table>
       </div>
     </BaseCard>
-  </AdminLayout>
 </template>
 

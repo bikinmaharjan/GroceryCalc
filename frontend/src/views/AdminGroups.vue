@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
-import AdminLayout from '../components/AdminLayout.vue'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 
@@ -86,7 +85,6 @@ const createGroup = async () => {
 
 
 <template>
-  <AdminLayout>
       <div class="mb-8">
         <h2 class="text-2xl font-bold text-slate-800 mb-4">Create Group</h2>
         <div class="flex gap-2">
@@ -136,6 +134,5 @@ const createGroup = async () => {
           </table>
         </div>
       </BaseCard>
-  </AdminLayout>
 </template>
 

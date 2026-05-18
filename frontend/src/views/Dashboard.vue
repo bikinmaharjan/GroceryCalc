@@ -19,8 +19,9 @@ import {
   BarChart3,
   Calendar,
   Sun,
-  Moon
-} from '@lucide/vue'
+   Moon,
+   LogOut
+ } from '@lucide/vue'
 import { 
   Chart as ChartJS, 
   Title, 
@@ -362,7 +363,7 @@ onMounted(loadData)
     <nav :class="['shadow-sm p-4 flex justify-between items-center transition-colors duration-300', isDarkMode ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-900']">
       <div class="flex items-center gap-4">
         <span class="font-bold text-xl text-emerald-600">GrocerySplit</span>
-        <select v-model="selectedGroup" @change="loadListAndData" class="p-1 border rounded text-sm">
+        <select v-model="selectedGroup" @change="loadListAndData" class="p-3 border rounded-xl w-40 focus:ring-2 focus:ring-emerald-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100">
             <option v-for="g in groups" :key="g.id" :value="g">{{ g.name }}</option>
         </select>
       </div>
@@ -375,7 +376,9 @@ onMounted(loadData)
             <RouterLink to="/dashboard/settlements" :class="{'text-emerald-600 font-medium': activeTab === 'settlements'}">Settlements</RouterLink>
             <RouterLink to="/dashboard/history" :class="{'text-emerald-600 font-medium': activeTab === 'history'}">History</RouterLink>
             <RouterLink to="/dashboard/analytics" :class="{'text-emerald-600 font-medium': activeTab === 'analytics'}">Analytics</RouterLink>
-           <button @click="handleLogout" class="text-slate-600 hover:text-red-600 text-sm ml-4">Logout</button>
+            <button @click="handleLogout" class="text-slate-600 hover:text-red-600 ml-4" title="Logout">
+              <LogOut class="w-5 h-5" />
+            </button>
         </div>
 
     </nav>

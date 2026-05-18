@@ -5,7 +5,6 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from app.database import get_db
 from app.models import Item, List, GroupMember, User, Settlement
-from app.dependencies import get_current_user
 from collections import defaultdict
 
 router = APIRouter()

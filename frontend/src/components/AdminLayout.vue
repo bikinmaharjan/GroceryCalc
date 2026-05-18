@@ -29,7 +29,8 @@
           Audit Logs
         </router-link>
       </nav>
-      <button @click="handleLogout" class="block w-full py-2.5 px-4 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+      <button @click="handleLogout" class="flex items-center gap-3 w-full py-2.5 px-4 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+        <LogOut class="w-5 h-5" />
         Logout
       </button>
     </aside>
@@ -42,6 +43,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { LogOut } from '@lucide/vue'
 
 const router = useRouter()
 const auth = useAuthStore()
