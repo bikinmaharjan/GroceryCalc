@@ -159,6 +159,8 @@ const loadData = async () => {
     if (groups.value.length > 0) {
         selectedGroup.value = groups.value[0]
         await loadListAndData()
+    } else {
+        router.push('/no-group')
     }
   } catch (e) {
     console.error(e)

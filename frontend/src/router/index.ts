@@ -8,6 +8,7 @@ import AdminGroupsView from '../views/AdminGroups.vue'
 import AdminUsersView from '../views/AdminUsers.vue'
 import AdminListsView from '../views/AdminLists.vue'
 import AdminAuditView from '../views/AdminAudit.vue'
+import NoGroupView from '../views/NoGroupView.vue'
 import ChangePasswordView from '../views/ChangePassword.vue'
 
 const router = createRouter({
@@ -16,6 +17,7 @@ const router = createRouter({
     { path: '/', redirect: '/login' },
     { path: '/login', component: LoginView },
     { path: '/change-password', component: ChangePasswordView },
+    { path: '/no-group', component: NoGroupView, meta: { requiresAuth: true } },
     { 
       path: '/dashboard', 
       component: DashboardView, 
