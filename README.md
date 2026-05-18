@@ -5,10 +5,18 @@ GrocerySplit is a tool for managing grocery lists and splitting costs among grou
 ## Quick Start
 
 ### Using Docker (Recommended)
-The fastest way to run the entire stack is using Docker Compose:
+The fastest way to run the entire stack is using Docker Compose.
 
+**Option 1: Quick Deployment (Pre-built Images)**
+Use this to quickly start the app without building from source:
 ```bash
-docker-compose up --build
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**Option 2: Build from Source**
+Use this if you have made changes to the code:
+```bash
+docker compose up --build -d
 ```
 
 - **Backend:** http://localhost:8080
