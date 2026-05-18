@@ -9,7 +9,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import apiClient from '../api/axios';
 import { useSelectedGroup } from '../composables/useSelectedGroup';
 
 const { selectedGroup } = useSelectedGroup();
@@ -17,7 +17,7 @@ const lists = ref<any[]>([]);
 
 onMounted(async () => {
   if (selectedGroup.value) {
-    const res = await axios.get(`/api/lists/archived?group_id=${selectedGroup.value.id}`);
+     const res = await apiClient.get(`/lists/archived?group_id=${selectedGroup.value.id}`);
     lists.value = res.data;
   }
 });

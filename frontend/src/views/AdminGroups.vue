@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
+import apiClient from '../api/axios'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 
 interface User { id: number; username: string }
 interface Group { id: number; name: string }
+interface Member { user_id: number }
 
 const groups = ref<Group[]>([])
 const allUsers = ref<User[]>([])
-const groupMembers = ref<Record<number, User[]>>({})
-const auth = useAuthStore()
+const groupMembers = ref<Record<number, Member[]>>({})
 
 const editingGroup = ref<Group | null>(null)
 const editForm = ref({ name: '', user_ids: [] as number[] })
@@ -19,16 +18,14 @@ const newGroupName = ref('')
 
 const loadData = async () => {
   const [gRes, uRes] = await Promise.all([
-    axios.get<Group[]>('http://localhost:8080/api/admin/groups', { headers: { Authorization: `Bearer ${auth.token}` } }),
-    axios.get<User[]>('http://localhost:8080/api/admin/users', { headers: { Authorization: `Bearer ${auth.token}` } })
+    apiClient.get<Group[]>('/admin/groups'),
+    apiClient.get<User[]>('/admin/users')
   ])
   groups.value = gRes.data
   allUsers.value = uRes.data
   
   for (const group of groups.value) {
-      const res = await axios.get(`http://localhost:8080/api/admin/groups/${group.id}/members`, {
-        headers: { Authorization: `Bearer ${auth.token}` }
-      })
+      const res = await apiClient.get(`http://localhost:8080/api/admin/groups/${group.id}/members`)
       groupMembers.value[group.id] = res.data
   }
 }
@@ -52,9 +49,7 @@ const getMemberNames = (groupId: number) => {
 
 const startEdit = async (group: Group) => {
   editingGroup.value = group
-  const res = await axios.get<{user_id: number}[]>(`http://localhost:8080/api/admin/groups/${group.id}/members`, {
-    headers: { Authorization: `Bearer ${auth.token}` }
-  })
+  const res = await apiClient.get<{user_id: number}[]>(`/admin/groups/${group.id}/members`)
   editForm.value = { 
     name: group.name, 
     user_ids: res.data.map(m => m.user_id)
@@ -63,20 +58,17 @@ const startEdit = async (group: Group) => {
 
 const saveGroup = async () => {
   if (!editingGroup.value) return
-  await axios.put(`http://localhost:8080/api/admin/groups/${editingGroup.value.id}`, {
-      name: editForm.value.name,
-      user_ids: editForm.value.user_ids
-  }, {
-    headers: { Authorization: `Bearer ${auth.token}` }
-  })
+   await apiClient.put(`/admin/groups/${editingGroup.value.id}`, {
+       name: editForm.value.name,
+       user_ids: editForm.value.user_ids
+   })
   editingGroup.value = null
   loadData()
 }
 
 const createGroup = async () => {
-    await axios.post('http://localhost:8080/api/admin/groups', null, {
-        params: { name: newGroupName.value },
-        headers: { Authorization: `Bearer ${auth.token}` }
+    await apiClient.post('/admin/groups', null, {
+        params: { name: newGroupName.value }
     })
     newGroupName.value = ''
     loadData()

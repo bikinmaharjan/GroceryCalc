@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from 'axios'
+import apiClient from '../api/axios'
 import { useAuthStore } from '../stores/auth'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
@@ -48,9 +48,12 @@ ChartJS.register(
   ArcElement
 )
 
-interface Item { id: number; description: string; cost: number; created_at: string }
-interface List { id: number; name: string; is_settling?: boolean; status?: string }
+interface Item { id: number; description: string; cost: number; created_at: string; category?: string }
+interface List { id: number; name: string; is_settling?: boolean; status?: string; total_cost?: number; archived_at?: string; share_per_user?: number; user_payments?: any[]; transactions?: any[] }
 interface Group { id: number; name: string }
+interface Transaction { from: string; to: string; from_name: string; to_name: string; amount: number; status: 'pending' | 'paid' }
+interface Settlement { user: string; balance: number; total_paid: number; items: Item[] }
+interface SettlementDetails { settlements: Settlement[]; transactions: Transaction[]; member_count: number }
 
 const items = ref<Item[]>([])
 const activeList = ref<List | null>(null)
@@ -60,8 +63,8 @@ const selectedGroup = ref<Group | null>(null)
 const isLoading = ref(false)
 const stats = ref({ total_cost: 0, item_count: 0, share_per_user: 0 })
 const analytics = ref<any>(null)
-const settlementDetails = ref<any>({ settlements: [], transactions: [], member_count: 0 })
-const paymentModal = ref({ show: false, transaction: null as any })
+const settlementDetails = ref<SettlementDetails>({ settlements: [], transactions: [], member_count: 0 })
+const paymentModal = ref({ show: false, transaction: null as Transaction | null })
 
 const userChartData = computed(() => {
     if (!analytics.value?.user_totals) return null
@@ -149,7 +152,7 @@ const showToast = (message: string, type: 'success' | 'error' = 'success') => {
 const loadData = async () => {
   isLoading.value = true
   try {
-    const groupsRes = await axios.get<Group[]>('http://localhost:8080/api/my-groups', {
+    const groupsRes = await apiClient.get<Group[]>('/my-groups', {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
     groups.value = groupsRes.data
@@ -166,7 +169,7 @@ const loadData = async () => {
 
 const loadSettlementDetails = async () => {
     if (!activeList.value) return
-    const res = await axios.get(`http://localhost:8080/api/lists/${activeList.value.id}/settlements/details`, {
+    const res = await apiClient.get(`/lists/${activeList.value.id}/settlements/details`, {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
     settlementDetails.value = res.data
@@ -174,7 +177,7 @@ const loadSettlementDetails = async () => {
 
 const loadHistory = async () => {
     if (!selectedGroup.value) return
-    const res = await axios.get<List[]>(`http://localhost:8080/api/lists/archived?group_id=${selectedGroup.value.id}`, {
+    const res = await apiClient.get<List[]>(`/lists/archived?group_id=${selectedGroup.value.id}`, {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
     historyLists.value = res.data
@@ -183,7 +186,7 @@ const loadHistory = async () => {
 const loadListAndData = async () => {
     if (!selectedGroup.value) return
     isLoading.value = true
-    const listRes = await axios.get<List[]>(`http://localhost:8080/api/lists/active?group_id=${selectedGroup.value.id}`, {
+    const listRes = await apiClient.get<List[]>(`/lists/active?group_id=${selectedGroup.value.id}`, {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
     if (listRes.data.length > 0) {
@@ -201,7 +204,7 @@ const loadListAndData = async () => {
 const loadAnalytics = async () => {
     if (!selectedGroup.value) return
     try {
-        const res = await axios.get(`http://localhost:8080/api/analytics?group_id=${selectedGroup.value.id}`, {
+        const res = await apiClient.get(`/analytics?group_id=${selectedGroup.value.id}`, {
             headers: { Authorization: `Bearer ${auth.token}` }
         })
         analytics.value = res.data
@@ -212,7 +215,7 @@ const loadAnalytics = async () => {
 
 const loadItems = async () => {
   if (!activeList.value) return
-  const res = await axios.get<Item[]>(`http://localhost:8080/api/items?list_id=${activeList.value.id}`, {
+  const res = await apiClient.get<Item[]>(`/items?list_id=${activeList.value.id}`, {
     headers: { Authorization: `Bearer ${auth.token}` }
   })
   items.value = res.data
@@ -220,7 +223,7 @@ const loadItems = async () => {
 
 const loadStats = async () => {
     if (!activeList.value) return
-    const res = await axios.get(`http://localhost:8080/api/lists/${activeList.value.id}/settlements/calculate`, {
+    const res = await apiClient.get(`/lists/${activeList.value.id}/settlements/calculate`, {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
     stats.value = res.data
@@ -234,7 +237,7 @@ const addItem = async () => {
     categories.value.push(cat)
   }
 
-  await axios.post(`http://localhost:8080/api/items?list_id=${activeList.value.id}&description=${newItem.value.description}&cost=${newItem.value.cost}&category=${cat}`, null, {
+  await apiClient.post(`/items?list_id=${activeList.value.id}&description=${newItem.value.description}&cost=${newItem.value.cost}&category=${cat}`, null, {
     headers: { Authorization: `Bearer ${auth.token}` }
   })
   newItem.value = { description: '', cost: 0, category: 'grocery' }
@@ -260,7 +263,7 @@ const startEdit = (item: Item) => { editingItem.value = { ...item } }
 
 const saveItem = async () => {
     if (!editingItem.value) return
-    await axios.put(`http://localhost:8080/api/items/${editingItem.value.id}`, editingItem.value, {
+    await apiClient.put(`/items/${editingItem.value.id}`, editingItem.value, {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
     editingItem.value = null
@@ -269,7 +272,7 @@ const saveItem = async () => {
 
 const deleteItem = async (id: number) => {
     if (confirm('Delete this item?')) {
-        await axios.delete(`http://localhost:8080/api/items/${id}`, {
+        await apiClient.delete(`/items/${id}`, {
             headers: { Authorization: `Bearer ${auth.token}` }
         })
         await Promise.all([loadItems(), loadStats(), loadSettlementDetails()])
@@ -284,7 +287,7 @@ const confirmPayment = async () => {
     const t = paymentModal.value.transaction
     if (!t) return
     try {
-        await axios.post(`http://localhost:8080/api/lists/${activeList.value?.id}/settlements/mark-paid`, {
+        await apiClient.post(`/lists/${activeList.value?.id}/settlements/mark-paid`, {
             from_username: t.from,
             to_username: t.to,
             amount: t.amount
@@ -303,7 +306,7 @@ const confirmPayment = async () => {
 const startSettlement = async () => {
     if (!activeList.value) return
     try {
-        await axios.post(`http://localhost:8080/api/lists/${activeList.value.id}/settle`, null, {
+        await apiClient.post(`/lists/${activeList.value.id}/settle`, null, {
             headers: { Authorization: `Bearer ${auth.token}` }
         })
         activeList.value.is_settling = true
@@ -317,7 +320,7 @@ const archiveList = async () => {
     if (!activeList.value) return
     if (!confirm('Archive this list? This will move it to history.')) return
     try {
-        await axios.post(`http://localhost:8080/api/lists/${activeList.value.id}/archive`, null, {
+        await apiClient.post(`/lists/${activeList.value.id}/archive`, null, {
             headers: { Authorization: `Bearer ${auth.token}` }
         })
         showToast('List archived successfully!')
@@ -330,7 +333,7 @@ const archiveList = async () => {
 const createList = async () => {
     if (!selectedGroup.value) return
     try {
-        await axios.post(`http://localhost:8080/api/lists?group_id=${selectedGroup.value.id}&name=${newListName.value}`, null, {
+        await apiClient.post(`/lists?group_id=${selectedGroup.value.id}&name=${newListName.value}`, null, {
             headers: { Authorization: `Bearer ${auth.token}` }
         })
         showToast('List created successfully!')
@@ -344,7 +347,7 @@ const createList = async () => {
 const renameList = async () => {
     if (!activeList.value) return
     try {
-        await axios.put(`http://localhost:8080/api/lists/${activeList.value.id}?name=${editingListName.value}`, null, {
+        await apiClient.put(`/lists/${activeList.value.id}?name=${editingListName.value}`, null, {
             headers: { Authorization: `Bearer ${auth.token}` }
         })
         showToast('List renamed successfully!')
@@ -692,7 +695,7 @@ onMounted(loadData)
                     </div>
                     <div>
                       <p class="text-indigo-100 text-sm font-medium">Total Archived Spending</p>
-                      <p class="text-3xl font-bold">${{ historyLists.reduce((sum, list) => sum + list.total_cost, 0).toFixed(2) }}</p>
+                      <p class="text-3xl font-bold">${{ historyLists.reduce((sum, list) => sum + (list.total_cost || 0), 0).toFixed(2) }}</p>
                     </div>
                   </div>
                   <div class="grid grid-cols-2 gap-8">
@@ -702,7 +705,7 @@ onMounted(loadData)
                     </div>
                     <div class="text-center md:text-left">
                       <p class="text-indigo-100 text-xs uppercase font-bold tracking-wider mb-1">Avg. Per List</p>
-                      <p class="text-2xl font-bold">${{ historyLists.length > 0 ? (historyLists.reduce((sum, list) => sum + list.total_cost, 0) / historyLists.length).toFixed(2) : '0.00' }}</p>
+                      <p class="text-2xl font-bold">${{ historyLists.length > 0 ? (historyLists.reduce((sum, list) => sum + (list.total_cost || 0), 0) / historyLists.length).toFixed(2) : '0.00' }}</p>
                     </div>
                   </div>
                 </div>
@@ -728,20 +731,20 @@ onMounted(loadData)
                           </div>
                           <div class="text-right">
                               <p class="text-sm text-slate-500 dark:text-slate-400">Total</p>
-                              <p class="font-bold text-emerald-600 dark:text-emerald-400">${{ list.total_cost.toFixed(2) }}</p>
+                              <p class="font-bold text-emerald-600 dark:text-emerald-400">${{ (list.total_cost || 0).toFixed(2) }}</p>
                           </div>
                       </div>
                       <div class="border-t dark:border-slate-700 pt-3 mb-4">
                           <div class="flex justify-between items-center mb-2">
                               <p class="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase">Share per Person</p>
-                              <p class="text-xs font-bold text-slate-700 dark:text-slate-300">${{ list.share_per_user.toFixed(2) }}</p>
+                              <p class="text-xs font-bold text-slate-700 dark:text-slate-300">${{ (list.share_per_user || 0).toFixed(2) }}</p>
                           </div>
                           <div class="space-y-1">
-                              <div v-for="p in list.user_payments" :key="p.user" class="flex justify-between text-sm">
+                              <div v-for="p in (list.user_payments || [])" :key="p.user" class="flex justify-between text-sm">
                                   <span class="text-slate-600 dark:text-slate-400">{{ p.user }}</span>
                                   <span class="font-medium text-slate-800 dark:text-slate-200">${{ p.paid.toFixed(2) }}</span>
                               </div>
-                              <div v-if="list.user_payments.length === 0" class="text-xs text-slate-400 dark:text-slate-500 italic">
+                              <div v-if="(list.user_payments?.length || 0) === 0" class="text-xs text-slate-400 dark:text-slate-500 italic">
                                   No payment data available.
                               </div>
                           </div>
@@ -749,11 +752,11 @@ onMounted(loadData)
                       <div class="border-t dark:border-slate-700 pt-3">
                           <p class="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase mb-2">Final Settlements</p>
                           <div class="space-y-1">
-                              <div v-for="t in list.transactions" :key="t.from + t.to" class="flex justify-between text-sm">
+                              <div v-for="t in (list.transactions || [])" :key="t.from + t.to" class="flex justify-between text-sm">
                                   <span class="text-slate-600 dark:text-slate-400">{{ t.from }} <span class="text-emerald-500 mx-1">→</span> {{ t.to }}</span>
                                   <span class="font-medium text-slate-800 dark:text-slate-200">${{ t.amount.toFixed(2) }}</span>
                               </div>
-                              <div v-if="list.transactions.length === 0" class="text-xs text-slate-400 dark:text-slate-500 italic">
+                              <div v-if="(list.transactions?.length || 0) === 0" class="text-xs text-slate-400 dark:text-slate-500 italic">
                                   No debts were recorded.
                               </div>
                           </div>

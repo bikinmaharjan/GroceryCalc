@@ -1,38 +1,30 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
+import apiClient from '../api/axios'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 
 interface User { id: number; username: string; display_name: string; is_admin: boolean }
 
 const users = ref<User[]>([])
-const auth = useAuthStore()
 const newUser = ref({ username: '', display_name: '' })
 
 const loadUsers = async () => {
-  const res = await axios.get<User[]>('http://localhost:8080/api/admin/users', {
-    headers: { Authorization: `Bearer ${auth.token}` }
-  })
+  const res = await apiClient.get<User[]>('/admin/users')
   users.value = res.data
 }
 
 onMounted(loadUsers)
 
 const saveUser = async () => {
-  await axios.post('http://localhost:8080/api/admin/users', newUser.value, {
-    headers: { Authorization: `Bearer ${auth.token}` }
-  })
+   await apiClient.post('/admin/users', newUser.value)
   newUser.value = { username: '', display_name: '' }
   loadUsers()
 }
 
 const resetPassword = async (userId: number) => {
   if (confirm('Are you sure you want to reset this user\'s password?')) {
-    await axios.post(`http://localhost:8080/api/admin/users/${userId}/reset-password`, null, {
-        headers: { Authorization: `Bearer ${auth.token}` }
-    })
+      await apiClient.post(`/admin/users/${userId}/reset-password`, null)
     alert('Password reset to password123')
   }
 }

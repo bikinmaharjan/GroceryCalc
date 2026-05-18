@@ -1,0 +1,8 @@
+grocery.db
+venv/
+__pycache__/
+.git/
+.pytest_cache/
+uploads/
+frontend/node_modules/
+.env

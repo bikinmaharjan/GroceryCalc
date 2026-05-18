@@ -25,22 +25,21 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import apiClient from '../api/axios'
 import AdminLayout from '../components/AdminLayout.vue'
 import BaseCard from '../components/BaseCard.vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 const stats = ref({ users: 0, groups: 0 })
-const router = useRouter()
 const route = useRoute()
 
 onMounted(async () => {
   if (route.path === '/admin') {
     try {
-      const [usersRes, groupsRes] = await Promise.all([
-        axios.get('http://localhost:8080/api/admin/stats/users'),
-        axios.get('http://localhost:8080/api/admin/stats/groups')
-      ])
+        const [usersRes, groupsRes] = await Promise.all([
+          apiClient.get('/admin/stats/users'),
+          apiClient.get('/admin/stats/groups')
+        ])
       stats.value = { users: usersRes.data.count, groups: groupsRes.data.count }
     } catch (e) {
       console.error('Failed to load stats', e)

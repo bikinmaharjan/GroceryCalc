@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import apiClient from '../api/axios';
 import { useSelectedGroup } from '../composables/useSelectedGroup';
 
 const { selectedGroup } = useSelectedGroup();
@@ -19,7 +19,7 @@ const analytics = ref<any>(null);
 
 onMounted(async () => {
   if (selectedGroup.value) {
-    const res = await axios.get(`/api/analytics?group_id=${selectedGroup.value.id}`);
+     const res = await apiClient.get(`/analytics?group_id=${selectedGroup.value.id}`);
     analytics.value = res.data;
   }
 });

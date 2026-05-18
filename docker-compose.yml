@@ -1,12 +1,27 @@
 version: '3.8'
+
 services:
   backend:
     build: .
+    container_name: grocery-backend
     ports:
       - "8080:8080"
     volumes:
-      - .:/app
+      - grocery_data:/app
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
+      - ADMIN_DISPLAY_NAME=Administrator
+    restart: always
+
   frontend:
-    build: frontend
+    build: ./frontend
+    container_name: grocery-frontend
     ports:
       - "3000:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  grocery_data:

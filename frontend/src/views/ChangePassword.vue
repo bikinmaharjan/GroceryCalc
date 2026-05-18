@@ -14,21 +14,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
+import apiClient from '../api/axios'
 import BaseCard from '../components/BaseCard.vue'
 import BaseButton from '../components/BaseButton.vue'
 
 const newPassword = ref('')
 const error = ref('')
 const router = useRouter()
-const auth = useAuthStore()
 
 const handleReset = async () => {
     try {
-        await axios.post('http://localhost:8080/api/change-password', 
-            { new_password: newPassword.value },
-            { headers: { Authorization: `Bearer ${auth.token}` } }
+        await apiClient.post('/change-password', 
+            { new_password: newPassword.value }
         )
         router.push('/dashboard')
     } catch (e: any) {

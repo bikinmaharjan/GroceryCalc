@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import axios from 'axios'
+import apiClient from '../api/axios'
 
-interface User { username: string; is_admin: boolean; must_change_password: boolean }
+interface User { username: string; display_name?: string; is_admin: boolean; must_change_password: boolean }
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -14,13 +14,13 @@ export const useAuthStore = defineStore('auth', {
       params.append('username', username)
       params.append('password', password)
       
-      const response = await axios.post('http://localhost:8080/api/login', params)
+      const response = await apiClient.post('/login', params)
       this.token = response.data.access_token
       localStorage.setItem('token', this.token)
       
       this.user = { 
         username, 
-        is_admin: username === 'admin',
+        is_admin: response.data.is_admin,
         must_change_password: response.data.must_change_password 
       } 
       localStorage.setItem('user', JSON.stringify(this.user))
