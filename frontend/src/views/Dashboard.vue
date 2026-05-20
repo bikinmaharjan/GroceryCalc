@@ -73,7 +73,8 @@ const analytics = ref<any>(null)
 const settlementDetails = ref<SettlementDetails>({ settlements: [], transactions: [], member_count: 0 })
 const paymentModal = ref({ show: false, transaction: null as Transaction | null })
 const categoryModal = ref({ show: false, itemRef: null as any, newCategory: '' })
-const confirmModal = ref({ show: false, title: '', message: '', action: null as (() => Promise<void>) | null })
+const confirmModal = ref({ show: false, title: '', message: '', action: null as (() => Promise<void>) | null, isDestructive: false })
+const deleteConfirmationText = ref('')
 
 const userChartData = computed(() => {
     if (!analytics.value?.user_totals) return null
@@ -110,6 +111,10 @@ const trendChartData = computed(() => {
             tension: 0.3
         }]
     }
+})
+
+const userTotalSpent = computed(() => {
+    return items.value.reduce((sum, item) => sum + item.cost, 0)
 })
 
 const auth = useAuthStore()
@@ -337,6 +342,7 @@ const startSettlement = async () => {
         show: true, 
         title: 'Start Settlement', 
         message: 'Are you sure you want to start settlement? Items will be locked.', 
+        isDestructive: false,
         action: async () => {
             if (!activeList.value) return
             try {
@@ -357,6 +363,7 @@ const archiveList = async () => {
         show: true, 
         title: 'Archive List', 
         message: 'Are you sure you want to archive this list? This will move it to history.', 
+        isDestructive: false,
         action: async () => {
             if (!activeList.value) return
             try {
@@ -377,6 +384,7 @@ const cancelSettlement = async () => {
         show: true, 
         title: 'Cancel Settlement', 
         message: 'Are you sure you want to cancel settlement? This will unlock the list for adding new items.', 
+        isDestructive: false,
         action: async () => {
             if (!activeList.value) return
             try {
@@ -393,6 +401,9 @@ const cancelSettlement = async () => {
 }
 
 const confirmAction = async () => {
+    if (confirmModal.value.isDestructive && deleteConfirmationText.value !== 'Delete') {
+        return
+    }
     if (confirmModal.value.action) {
         await confirmModal.value.action()
     }
@@ -425,6 +436,28 @@ const renameList = async () => {
     } catch (e) {
         showToast('Failed to rename list', 'error')
     }
+}
+
+const deleteList = async () => {
+    confirmModal.value = {
+        show: true,
+        title: 'Delete List',
+        message: `Are you sure you want to delete the list "${activeList.value?.name}"? This action cannot be undone.`,
+        isDestructive: true,
+        action: async () => {
+            if (!activeList.value) return
+            try {
+                await apiClient.delete(`/lists/${activeList.value.id}`, {
+                    headers: { Authorization: `Bearer ${auth.token}` }
+                })
+                showToast('List deleted successfully!')
+                await loadListAndData()
+            } catch (e) {
+                showToast('Failed to delete list', 'error')
+            }
+        }
+    }
+    deleteConfirmationText.value = ''
 }
 
 onMounted(() => {
@@ -478,7 +511,7 @@ onMounted(() => {
         <div v-if="isLoading" class="p-6 max-w-5xl mx-auto">
           <LoadingSkeleton />
         </div>
-         <div v-else-if="!activeList" class="text-center mt-20 max-w-md mx-auto">
+          <div v-else-if="!activeList && (activeTab === 'items' || activeTab === 'settlements')" class="text-center mt-20 max-w-md mx-auto">
            <div class="mb-6 inline-flex p-6 bg-emerald-50 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-400">
              <ShoppingBag class="w-12 h-12" />
            </div>
@@ -526,19 +559,22 @@ onMounted(() => {
                    </div>
 
                    <!-- Rename Button -->
-                   <div class="flex gap-1 items-center">
-                     <button v-if="!isRenaming" @click="isRenaming = true; editingListName = activeList.name" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors" title="Rename list">
-                       <Pen class="w-4 h-4" />
-                     </button>
-                     <div v-else class="flex gap-1">
-                       <button @click="renameList" class="p-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors" title="Save">
-                         <Check class="w-4 h-4" />
-                       </button>
-                       <button @click="isRenaming = false" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors" title="Cancel">
-                         <X class="w-4 h-4" />
-                       </button>
-                     </div>
-                   </div>
+                    <div class="flex gap-1 items-center">
+                      <button v-if="!isRenaming" @click="isRenaming = true; editingListName = activeList?.name || ''" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors" title="Rename list">
+                        <Pen class="w-4 h-4" />
+                      </button>
+                      <button v-if="!isRenaming" @click="deleteList" class="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Delete list">
+                        <Trash2 class="w-4 h-4" />
+                      </button>
+                      <div v-else class="flex gap-1">
+                        <button @click="renameList" class="p-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors" title="Save">
+                          <Check class="w-4 h-4" />
+                        </button>
+                        <button @click="isRenaming = false" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors" title="Cancel">
+                          <X class="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                  </div>
 
                  <!-- Rename Input (only show when renaming) -->
@@ -548,13 +584,16 @@ onMounted(() => {
 
                  <BaseCard class="bg-gradient-to-br from-emerald-500 to-emerald-700 text-white border-none shadow-lg p-6 mb-6">
                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                      <div>
-                          <div class="flex items-center gap-2 text-emerald-100 text-xs uppercase font-bold tracking-wider mb-1">
-                            <DollarSign class="w-3 h-3" />
-                            <span>List Total</span>
-                          </div>
-                          <p class="text-3xl font-bold">${{ stats.total_cost.toFixed(2) }}</p>
-                      </div>
+                       <div>
+                           <div class="flex items-center gap-2 text-emerald-100 text-xs uppercase font-bold tracking-wider mb-1">
+                             <DollarSign class="w-3 h-3" />
+                             <span>List Total</span>
+                           </div>
+                           <div class="flex items-baseline gap-2">
+                               <p class="text-3xl font-bold">${{ stats.total_cost.toFixed(2) }}</p>
+                               <p class="text-sm font-medium text-emerald-200">You: ${{ userTotalSpent.toFixed(2) }}</p>
+                           </div>
+                       </div>
                       <div>
                           <div class="flex items-center gap-2 text-emerald-100 text-xs uppercase font-bold tracking-wider mb-1">
                             <ShoppingBag class="w-3 h-3" />
@@ -693,7 +732,7 @@ onMounted(() => {
          <!-- Settlements Tab -->
          <div v-if="activeTab === 'settlements'" class="space-y-6">
               <div class="flex justify-between items-center mb-4">
-                  <h2 :class="['font-bold text-2xl', isDarkMode ? 'text-slate-100' : 'text-slate-800']">Settlement</h2>
+                  <h2 :class="['font-bold text-2xl', isDarkMode ? 'text-slate-100' : 'text-slate-800']">Settlement <span class="text-emerald-600 mx-1">|</span> {{ activeList?.name }}</h2>
                   <div class="flex gap-3">
                      <BaseButton v-if="!activeList?.is_settling" @click="startSettlement" variant="primary">Start Settlement</BaseButton>
                       <BaseButton v-if="activeList?.is_settling" @click="archiveList" variant="secondary">Archive List</BaseButton>
@@ -1060,26 +1099,38 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Confirmation Modal -->
-      <div v-if="confirmModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="p-2 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full">
-              <DollarSign class="w-6 h-6" />
-            </div>
-            <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">{{ confirmModal.title }}</h3>
-          </div>
-          
-          <div class="mb-6">
-            <p class="text-slate-600 dark:text-slate-300">{{ confirmModal.message }}</p>
-          </div>
-          
-          <div class="flex gap-3">
-            <BaseButton variant="secondary" class="flex-1" @click="confirmModal.show = false">Cancel</BaseButton>
-            <BaseButton variant="primary" class="flex-1 bg-amber-600 hover:bg-amber-700" @click="confirmAction">Confirm</BaseButton>
-          </div>
-        </div>
-      </div>
+       <!-- Confirmation Modal -->
+       <div v-if="confirmModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+         <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+           <div class="flex items-center gap-3 mb-4">
+             <div :class="['p-2 rounded-full', confirmModal.isDestructive ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400']">
+               <DollarSign class="w-6 h-6" />
+             </div>
+             <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">{{ confirmModal.title }}</h3>
+           </div>
+           
+           <div class="mb-6">
+             <p class="text-slate-600 dark:text-slate-300 mb-4">{{ confirmModal.message }}</p>
+             <div v-if="confirmModal.isDestructive" class="space-y-2">
+               <label class="block text-sm font-medium text-slate-500 dark:text-slate-400">Type "Delete" to confirm</label>
+               <input v-model="deleteConfirmationText" placeholder="Delete" class="p-3 border rounded-xl w-full focus:ring-2 focus:ring-red-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" />
+             </div>
+           </div>
+           
+           <div class="flex gap-3">
+             <BaseButton variant="secondary" class="flex-1" @click="confirmModal.show = false">Cancel</BaseButton>
+             <BaseButton 
+               variant="primary" 
+               :class="['flex-1', confirmModal.isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700']" 
+               :disabled="confirmModal.isDestructive && deleteConfirmationText !== 'Delete'"
+               @click="confirmAction"
+             >
+               {{ confirmModal.isDestructive ? 'I confirm to delete' : 'Confirm' }}
+             </BaseButton>
+           </div>
+         </div>
+       </div>
+
 
       <!-- Payment Confirmation Modal -->
 

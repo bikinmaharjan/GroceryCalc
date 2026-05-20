@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, delete
 from app.database import get_db
 from app.models import List, Item, User, GroupMember
 from app.dependencies import get_current_user
@@ -140,3 +140,27 @@ async def archive_list(list_id: int, db: AsyncSession = Depends(get_db), current
     list_obj.is_settling = False
     await db.commit()
     return list_obj
+
+@router.delete("/lists/{list_id}")
+async def delete_list(list_id: int, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+    result = await db.execute(select(List).where(List.id == list_id))
+    list_obj = result.scalar_one_or_none()
+    if not list_obj:
+        raise HTTPException(status_code=404, detail="List not found")
+    
+    # Verify user is a member of the group
+    stmt = select(GroupMember).where(
+        GroupMember.group_id == list_obj.group_id, 
+        GroupMember.user_id == current_user.id
+    )
+    member_result = await db.execute(stmt)
+    if not member_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # Delete associated items
+    await db.execute(delete(Item).where(Item.list_id == list_id))
+    
+    # Delete the list
+    await db.delete(list_obj)
+    await db.commit()
+    return {"status": "success"}
