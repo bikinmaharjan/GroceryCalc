@@ -7,7 +7,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - grocery_data:/app
+      - ./grocery.db:/app/grocery.db
     environment:
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
@@ -22,6 +22,3 @@ services:
     depends_on:
       - backend
     restart: always
-
-volumes:
-  grocery_data:

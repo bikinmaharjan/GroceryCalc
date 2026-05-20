@@ -116,6 +116,17 @@ async def start_settlement(list_id: int, db: AsyncSession = Depends(get_db), cur
     await db.commit()
     return list_obj
 
+@router.post("/lists/{list_id}/cancel-settlement")
+async def cancel_settlement(list_id: int, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+    result = await db.execute(select(List).where(List.id == list_id))
+    list_obj = result.scalar_one_or_none()
+    if not list_obj:
+        raise HTTPException(status_code=404, detail="List not found")
+    
+    list_obj.is_settling = False
+    await db.commit()
+    return list_obj
+
 
 @router.post("/lists/{list_id}/archive")
 async def archive_list(list_id: int, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):

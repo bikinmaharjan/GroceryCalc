@@ -20,7 +20,13 @@ import {
   Calendar,
   Sun,
    Moon,
-   LogOut
+   LogOut,
+   ChevronDown,
+   Pen,
+   User,
+   Check,
+   X,
+   Plus
  } from '@lucide/vue'
 import { 
   Chart as ChartJS, 
@@ -57,6 +63,7 @@ interface SettlementDetails { settlements: Settlement[]; transactions: Transacti
 
 const items = ref<Item[]>([])
 const activeList = ref<List | null>(null)
+const activeLists = ref<List[]>([])
 const historyLists = ref<List[]>([])
 const groups = ref<Group[]>([])
 const selectedGroup = ref<Group | null>(null)
@@ -65,6 +72,8 @@ const stats = ref({ total_cost: 0, item_count: 0, share_per_user: 0 })
 const analytics = ref<any>(null)
 const settlementDetails = ref<SettlementDetails>({ settlements: [], transactions: [], member_count: 0 })
 const paymentModal = ref({ show: false, transaction: null as Transaction | null })
+const categoryModal = ref({ show: false, itemRef: null as any, newCategory: '' })
+const confirmModal = ref({ show: false, title: '', message: '', action: null as (() => Promise<void>) | null })
 
 const userChartData = computed(() => {
     if (!analytics.value?.user_totals) return null
@@ -104,11 +113,16 @@ const trendChartData = computed(() => {
 })
 
 const auth = useAuthStore()
-const isDarkMode = ref(false)
+const isDarkMode = ref(true)
 
 watch(isDarkMode, (val) => {
     ChartJS.defaults.color = val ? '#ffffff' : '#64748b'
     ChartJS.defaults.borderColor = val ? 'rgba(255, 255, 255, 0.2)' : 'rgba(226, 232, 240, 0.8)'
+    if (val) {
+        document.documentElement.classList.add('dark')
+    } else {
+        document.documentElement.classList.remove('dark')
+    }
 }, { immediate: true })
 
 const router = useRouter()
@@ -117,6 +131,8 @@ const activeTab = ref('items')
 const newListName = ref('')
 const editingListName = ref('')
 const isRenaming = ref(false)
+const showCreateListModal = ref(false)
+const isListDropdownOpen = ref(false)
 
 watch(() => route.path, (newPath) => {
     if (newPath.includes('settlements')) activeTab.value = 'settlements'
@@ -191,6 +207,7 @@ const loadListAndData = async () => {
     const listRes = await apiClient.get<List[]>(`/lists/active?group_id=${selectedGroup.value.id}`, {
         headers: { Authorization: `Bearer ${auth.token}` }
     })
+    activeLists.value = listRes.data
     if (listRes.data.length > 0) {
         activeList.value = listRes.data[0]
         await Promise.all([loadItems(), loadStats(), loadSettlementDetails(), loadHistory(), loadAnalytics()])
@@ -231,6 +248,13 @@ const loadStats = async () => {
     stats.value = res.data
 }
 
+const switchList = async (list: List) => {
+    activeList.value = list
+    editingListName.value = list.name
+    isRenaming.value = false
+    await Promise.all([loadItems(), loadStats(), loadSettlementDetails()])
+}
+
 const addItem = async () => {
   if (!activeList.value) return
   
@@ -246,19 +270,22 @@ const addItem = async () => {
   await Promise.all([loadItems(), loadStats(), loadSettlementDetails()])
 }
 
-const handleCategoryChange = () => {
-    if (newItem.value.category === 'ADD_NEW') {
-        const newCat = prompt('Enter new category:')
-        if (newCat && newCat.trim()) {
-            const cat = newCat.trim()
-            if (!categories.value.includes(cat)) {
-                categories.value.push(cat)
-            }
-            newItem.value.category = cat
-        } else {
-            newItem.value.category = 'grocery'
-        }
+const handleCategoryChange = (item: any) => {
+    if (item.category === 'ADD_NEW') {
+        categoryModal.value = { show: true, itemRef: item, newCategory: '' }
     }
+}
+
+const saveCategory = () => {
+    const cat = categoryModal.value.newCategory.trim()
+    if (cat) {
+        if (!categories.value.includes(cat)) {
+            categories.value.push(cat)
+        }
+        categoryModal.value.itemRef.category = cat
+        showToast('Category added!')
+    }
+    categoryModal.value.show = false
 }
 
 const startEdit = (item: Item) => { editingItem.value = { ...item } }
@@ -306,30 +333,70 @@ const confirmPayment = async () => {
 }
 
 const startSettlement = async () => {
-    if (!activeList.value) return
-    try {
-        await apiClient.post(`/lists/${activeList.value.id}/settle`, null, {
-            headers: { Authorization: `Bearer ${auth.token}` }
-        })
-        activeList.value.is_settling = true
-        showToast('Settlement started. Items are now locked.')
-    } catch (e) {
-        showToast('Failed to start settlement', 'error')
+    confirmModal.value = { 
+        show: true, 
+        title: 'Start Settlement', 
+        message: 'Are you sure you want to start settlement? Items will be locked.', 
+        action: async () => {
+            if (!activeList.value) return
+            try {
+                await apiClient.post(`/lists/${activeList.value.id}/settle`, null, {
+                    headers: { Authorization: `Bearer ${auth.token}` }
+                })
+                activeList.value.is_settling = true
+                showToast('Settlement started. Items are now locked.')
+            } catch (e) {
+                showToast('Failed to start settlement', 'error')
+            }
+        }
     }
 }
 
 const archiveList = async () => {
-    if (!activeList.value) return
-    if (!confirm('Archive this list? This will move it to history.')) return
-    try {
-        await apiClient.post(`/lists/${activeList.value.id}/archive`, null, {
-            headers: { Authorization: `Bearer ${auth.token}` }
-        })
-        showToast('List archived successfully!')
-        await loadListAndData()
-    } catch (e) {
-        showToast('Failed to archive list', 'error')
+    confirmModal.value = { 
+        show: true, 
+        title: 'Archive List', 
+        message: 'Are you sure you want to archive this list? This will move it to history.', 
+        action: async () => {
+            if (!activeList.value) return
+            try {
+                await apiClient.post(`/lists/${activeList.value.id}/archive`, null, {
+                    headers: { Authorization: `Bearer ${auth.token}` }
+                })
+                showToast('List archived successfully!')
+                await loadListAndData()
+            } catch (e) {
+                showToast('Failed to archive list', 'error')
+            }
+        }
     }
+}
+
+const cancelSettlement = async () => {
+    confirmModal.value = { 
+        show: true, 
+        title: 'Cancel Settlement', 
+        message: 'Are you sure you want to cancel settlement? This will unlock the list for adding new items.', 
+        action: async () => {
+            if (!activeList.value) return
+            try {
+                await apiClient.post(`/lists/${activeList.value.id}/cancel-settlement`, null, {
+                    headers: { Authorization: `Bearer ${auth.token}` }
+                })
+                showToast('Settlement cancelled!')
+                await loadListAndData()
+            } catch (e) {
+                showToast('Failed to cancel settlement', 'error')
+            }
+        }
+    }
+}
+
+const confirmAction = async () => {
+    if (confirmModal.value.action) {
+        await confirmModal.value.action()
+    }
+    confirmModal.value.show = false
 }
 
 const createList = async () => {
@@ -360,7 +427,13 @@ const renameList = async () => {
     }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  document.addEventListener('click', (e) => {
+    const dropdown = (e.target as HTMLElement).closest('.list-dropdown')
+    if (!dropdown) isListDropdownOpen.value = false
+  })
+})
 </script>
 
 <template>
@@ -373,17 +446,29 @@ onMounted(loadData)
         </select>
       </div>
         <div class="flex gap-4 items-center">
-            <button @click="toggleDarkMode" class="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors" title="Toggle Dark Mode">
-              <Sun v-if="isDarkMode" class="w-5 h-5" />
-              <Moon v-else class="w-5 h-5" />
-            </button>
             <RouterLink to="/dashboard/items" :class="{'text-emerald-600 font-medium': activeTab === 'items'}">Items</RouterLink>
             <RouterLink to="/dashboard/settlements" :class="{'text-emerald-600 font-medium': activeTab === 'settlements'}">Settlements</RouterLink>
             <RouterLink to="/dashboard/history" :class="{'text-emerald-600 font-medium': activeTab === 'history'}">History</RouterLink>
             <RouterLink to="/dashboard/analytics" :class="{'text-emerald-600 font-medium': activeTab === 'analytics'}">Analytics</RouterLink>
-            <button @click="handleLogout" class="text-slate-600 hover:text-red-600 ml-4" title="Logout">
-              <LogOut class="w-5 h-5" />
-            </button>
+            <!-- User Profile Dropdown -->
+            <div class="relative group">
+              <button class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors">
+                <User class="w-5 h-5 text-slate-400" />
+                <span class="text-sm font-medium">{{ auth.user?.display_name || auth.user?.username }}</span>
+              </button>
+              <div class="absolute right-0 mt-0 hidden group-hover:block bg-slate-800 border border-slate-700 rounded-lg shadow-lg min-w-40 z-10">
+                <button @click="toggleDarkMode" class="w-full text-left px-4 py-2 hover:bg-slate-700 transition-colors text-sm text-slate-300 flex items-center gap-2">
+                  <Sun v-if="isDarkMode" class="w-4 h-4" />
+                  <Moon v-else class="w-4 h-4" />
+                  {{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
+                </button>
+                <div class="border-t border-slate-700"></div>
+                <button @click="handleLogout" class="w-full text-left px-4 py-2 hover:bg-red-900/20 transition-colors text-sm text-red-400 flex items-center gap-2">
+                  <LogOut class="w-4 h-4" />
+                  Logout
+                </button>
+              </div>
+            </div>
         </div>
 
     </nav>
@@ -413,23 +498,52 @@ onMounted(loadData)
               <!-- Items Tab -->
               <div v-if="activeTab === 'items'">
 
-              <!-- Current List Summary -->
-              <div class="mb-8">
-<div :class="['flex justify-between items-center mb-6 pb-4 border-b', isDarkMode ? 'border-slate-700' : 'border-slate-200']">
-                    <div class="flex items-center gap-3">
-                      <div class="p-2 bg-emerald-100 rounded-lg text-emerald-700">
-                        <ShoppingBag class="w-6 h-6" />
-                      </div>
-                      <h2 :class="['font-extrabold text-3xl tracking-tight', isDarkMode ? 'text-slate-100' : 'text-slate-900']">
-                        <span v-if="!isRenaming">{{ activeList.name }}</span>
-                        <input v-else v-model="editingListName" :class="['p-1 border rounded text-2xl font-bold focus:ring-2 focus:ring-emerald-500 outline-none', isDarkMode ? 'text-slate-100 bg-slate-800 border-slate-700' : 'text-slate-900']" />
-                      </h2>
-                    </div>
-                   <div class="flex gap-2">
-                     <BaseButton v-if="!isRenaming" variant="secondary" class="text-xs" @click="isRenaming = true; editingListName = activeList.name">Rename</BaseButton>
-                     <BaseButton v-if="isRenaming" variant="primary" class="text-xs" @click="renameList">Save</BaseButton>
-                     <BaseButton v-if="isRenaming" variant="secondary" class="text-xs" @click="isRenaming = false">Cancel</BaseButton>
+               <!-- Current List Summary -->
+               <div class="mb-8">
+                 <div class="flex items-center gap-3 mb-4">
+                   <div class="p-2 bg-emerald-100 rounded-lg text-emerald-700">
+                     <ShoppingBag class="w-6 h-6" />
                    </div>
+                   
+                   <!-- List Selector Dropdown -->
+                   <div class="relative flex-1 list-dropdown">
+                     <button @click="isListDropdownOpen = !isListDropdownOpen" :class="['w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all', isListDropdownOpen ? 'border-emerald-500 bg-emerald-50 dark:bg-slate-800 dark:border-emerald-500' : 'border-slate-200 dark:border-slate-700 hover:border-emerald-300', isDarkMode ? 'dark:bg-slate-800 dark:text-slate-100' : 'bg-white text-slate-900']">
+                       <span class="font-bold text-lg">{{ activeList?.name }}</span>
+                       <ChevronDown :class="['w-5 h-5 transition-transform', isListDropdownOpen ? 'rotate-180' : '']" />
+                     </button>
+                     
+                     <div v-if="isListDropdownOpen" :class="['absolute top-full left-0 right-0 mt-2 rounded-xl border shadow-lg z-20', isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200']">
+                       <div class="max-h-64 overflow-y-auto">
+                         <button v-for="list in activeLists" :key="list.id" @click="switchList(list); isListDropdownOpen = false" :class="['w-full text-left px-4 py-3 border-b transition-colors', activeList?.id === list.id ? 'bg-emerald-50 dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 font-semibold' : 'hover:bg-slate-50 dark:hover:bg-slate-700', isDarkMode && activeList?.id !== list.id ? 'border-slate-700 text-slate-300' : 'border-slate-100']">
+                           {{ list.name }}
+                         </button>
+                       </div>
+                       <button @click="showCreateListModal = true; isListDropdownOpen = false" class="w-full flex items-center gap-2 px-4 py-3 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-slate-700 transition-colors font-medium text-sm">
+                         <Plus class="w-4 h-4" />
+                         New List
+                       </button>
+                     </div>
+                   </div>
+
+                   <!-- Rename Button -->
+                   <div class="flex gap-1 items-center">
+                     <button v-if="!isRenaming" @click="isRenaming = true; editingListName = activeList.name" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors" title="Rename list">
+                       <Pen class="w-4 h-4" />
+                     </button>
+                     <div v-else class="flex gap-1">
+                       <button @click="renameList" class="p-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors" title="Save">
+                         <Check class="w-4 h-4" />
+                       </button>
+                       <button @click="isRenaming = false" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors" title="Cancel">
+                         <X class="w-4 h-4" />
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+
+                 <!-- Rename Input (only show when renaming) -->
+                 <div v-if="isRenaming" class="mb-4 flex gap-2">
+                   <input v-model="editingListName" :class="['flex-1 p-3 border rounded-xl font-bold text-lg focus:ring-2 focus:ring-emerald-500 outline-none', isDarkMode ? 'text-slate-100 bg-slate-800 border-slate-700' : 'text-slate-900 bg-white border-slate-200']" />
                  </div>
 
                  <BaseCard class="bg-gradient-to-br from-emerald-500 to-emerald-700 text-white border-none shadow-lg p-6 mb-6">
@@ -481,7 +595,7 @@ onMounted(loadData)
                        <input v-model.number="newItem.cost" type="number" step="0.01" placeholder="0.00" class="p-3 pl-7 border rounded-xl w-full focus:ring-2 focus:ring-emerald-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" />
                      </div>
                      <div class="flex gap-2">
-                       <select v-model="newItem.category" @change="handleCategoryChange" class="p-3 border rounded-xl w-40 focus:ring-2 focus:ring-emerald-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100">
+                       <select v-model="newItem.category" @change="handleCategoryChange(newItem)" class="p-3 border rounded-xl w-40 focus:ring-2 focus:ring-emerald-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100">
                          <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
                          <option value="ADD_NEW">+ Add New...</option>
                        </select>
@@ -543,7 +657,12 @@ onMounted(loadData)
                             </tr>
                             <tr v-else class="bg-slate-50 dark:bg-slate-700/30">
                                 <td class="p-4"><input v-model="editingItem.description" class="p-1 border rounded w-full dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100" /></td>
-                                <td class="p-4"><input v-model="editingItem.category" class="p-1 border rounded w-full dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100" /></td>
+                                <td class="p-4">
+                                 <select v-model="editingItem.category" @change="handleCategoryChange(editingItem)" class="p-1 border rounded w-full dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100">
+                                   <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+                                   <option value="ADD_NEW">+ Add New...</option>
+                                 </select>
+                               </td>
                                 <td class="p-4"><input v-model.number="editingItem.cost" type="number" class="p-1 border rounded w-20 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100" /></td>
                                 <td class="p-4 text-slate-400 dark:text-slate-500">...</td>
                                 <td class="p-4 text-right">
@@ -577,7 +696,9 @@ onMounted(loadData)
                   <h2 :class="['font-bold text-2xl', isDarkMode ? 'text-slate-100' : 'text-slate-800']">Settlement</h2>
                   <div class="flex gap-3">
                      <BaseButton v-if="!activeList?.is_settling" @click="startSettlement" variant="primary">Start Settlement</BaseButton>
-                     <BaseButton v-if="activeList?.is_settling" @click="archiveList" variant="secondary">Archive List</BaseButton>
+                      <BaseButton v-if="activeList?.is_settling" @click="archiveList" variant="secondary">Archive List</BaseButton>
+                      <BaseButton v-if="activeList?.is_settling" @click="cancelSettlement" variant="secondary" class="border-amber-500 text-amber-600 hover:bg-amber-50">Cancel Settlement</BaseButton>
+
                  </div>
              </div>
 
@@ -892,7 +1013,76 @@ onMounted(loadData)
     </main>
 
 
-     <!-- Payment Confirmation Modal -->
+      <!-- Create New List Modal -->
+      <div v-if="showCreateListModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full">
+              <ShoppingBag class="w-6 h-6" />
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">Create New List</h3>
+          </div>
+          
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">List Name</label>
+            <input v-model="newListName" placeholder="e.g. Weekly Groceries" class="p-3 border rounded-xl w-full focus:ring-2 focus:ring-emerald-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" />
+          </div>
+          
+          <div class="flex gap-3">
+            <BaseButton variant="secondary" class="flex-1" @click="showCreateListModal = false">Cancel</BaseButton>
+            <BaseButton variant="primary" class="flex-1 bg-emerald-600 hover:bg-emerald-700 flex items-center justify-center gap-2" @click="async () => { await createList(); showCreateListModal = false }">
+              <Plus class="w-4 h-4" />
+              Create List
+            </BaseButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Addition Modal -->
+      <div v-if="categoryModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full">
+              <ShoppingBag class="w-6 h-6" />
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">Add New Category</h3>
+          </div>
+          
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Category Name</label>
+            <input v-model="categoryModal.newCategory" placeholder="e.g. Entertainment" class="p-3 border rounded-xl w-full focus:ring-2 focus:ring-emerald-500 outline-none dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100" />
+          </div>
+          
+          <div class="flex gap-3">
+            <BaseButton variant="secondary" class="flex-1" @click="categoryModal.show = false">Cancel</BaseButton>
+            <BaseButton variant="primary" class="flex-1 bg-emerald-600 hover:bg-emerald-700" @click="saveCategory">Save Category</BaseButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirmation Modal -->
+      <div v-if="confirmModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full">
+              <DollarSign class="w-6 h-6" />
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">{{ confirmModal.title }}</h3>
+          </div>
+          
+          <div class="mb-6">
+            <p class="text-slate-600 dark:text-slate-300">{{ confirmModal.message }}</p>
+          </div>
+          
+          <div class="flex gap-3">
+            <BaseButton variant="secondary" class="flex-1" @click="confirmModal.show = false">Cancel</BaseButton>
+            <BaseButton variant="primary" class="flex-1 bg-amber-600 hover:bg-amber-700" @click="confirmAction">Confirm</BaseButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment Confirmation Modal -->
+
      <div v-if="paymentModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
          <div class="flex items-center gap-3 mb-4">

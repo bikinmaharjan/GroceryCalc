@@ -12,6 +12,7 @@ router = APIRouter()
 class ItemUpdate(BaseModel):
     description: str
     cost: float
+    category: str | None = None
 
 @router.put("/items/{item_id}")
 async def update_item(item_id: int, data: ItemUpdate, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
@@ -29,6 +30,8 @@ async def update_item(item_id: int, data: ItemUpdate, db: AsyncSession = Depends
     
     item.description = data.description
     item.cost = data.cost
+    if data.category is not None:
+        item.category = data.category
     await db.commit()
     return item
 
